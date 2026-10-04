@@ -1,0 +1,103 @@
+# 自定义项目相关的配置
+myProject:
+  server:
+    requestTimeOut: 60000                   # 超时，单位毫秒
+  tomcatProject:
+    projectName: "planningGraphicCheckSystem"    # 如果使用tomcat，路由要加项目名
+  tempDir: "E:/testdata/temp"               # 临时目录
+  geoTable:
+    idFieldName: "OBJECTID"                 # 空间表的id字段名
+    geoFieldName: "GEOM"                    # 空间表的geometry字段名
+    dmgeo: "dmgeo"                          # 用的是 dmgeo 还是 dmgeo2
+    srid: 4490                              # 空间表的srid
+  webSocket:
+    paths: "/ws"                            # websocket路由路径
+    dataCompress: true                      # 是否启用压缩
+  dm:
+    blob2binaryLenLimit: 4000               # 数据库操作，blob直接转成byte[]的长度设置. 最大 = 32767
+  cache:
+    is_start_init: true                      # 是否在启动时初始化缓存
+    strategy: "redis"                      # memory 或 redis 。  内存最快，但是每次都要从数据库加载
+    superCacheThreshold: 500                # 启用超大缓存, 触发条件: blob2binaryLenLimit <= superCacheThreshold
+    dataCompress: true                      # 缓存是否启用压缩
+  upload:
+    rootDir: "D:\\test\\"                   # 文件存放的目录位置
+  download:
+    fileDir: "D:\\test\\"                   # 文件存放的目录位置
+
+# =============================
+
+# http server的端口
+server:
+  port: 8016
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+    #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl      # 测试的时候用，打印日志
+    # 将下划线转换为驼峰命名规则
+    map-underscore-to-camel-case: true
+    # 字段为null的也返回
+    call-setters-on-nulls: true
+
+spring:
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB    # 单个上传文件的最大大小
+      max-request-size: 100MB # 整个HTTP请求的最大大小（包含文件和表单数据）
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 16
+        queue-capacity: 1000
+  jackson:
+    #返回json首字母小写
+    property-naming-strategy: LOWER_CAMEL_CASE
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    # 连接池
+    hikari:
+      #连接池名
+      pool-name: DateHikariCP
+      #最小空闲连接数
+      minimum-idle: 5
+      # 空闲连接存活最大时间，默认600000（10分钟）
+      idle-timeout: 600000
+      # 连接池最大连接数，默认是10
+      maximum-pool-size: 30
+      # 此属性控制从池返回的连接的默认自动提交行为,默认值：true
+      auto-commit: true
+      # 此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
+      max-lifetime: 1800000
+      # 数据库连接超时时间,默认30秒，即30000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+      connection-init-sql: SET SCHEMA "kunshan_onemap_test"
+    url: jdbc:p6spy:dm://47.110.86.241:5236      #  测试打印sql用
+    #    url: jdbc:dm://47.110.86.241:5236
+    username: sysdba
+    password: 123@Abcd
+    #    driver-class-name: dm.jdbc.driver.DmDriver
+    driver-class-name: com.p6spy.engine.spy.P6SpyDriver   #  测试打印sql用
+
+  redis:
+    database: 0
+    host: 47.110.86.241
+    netHost: 47.110.86.241
+    port: 9008
+    password: 112233QQwwee
+    timeout: 5s  # 可设置连接超时
+    #    expire: 60  # 过期时间（分钟）
+    lettuce:
+      pool:
+        max-idle: 10
+        min-idle: 1
+        max-active: 10
+        max-wait: -1
+# 程序启动不检测redis。确保没有连redis也不会报错
+management:
+  health:
+    redis:
+      enabled: false

@@ -1,0 +1,3 @@
+login:
+  retryTimes: 3
+  lockDuration: 2
