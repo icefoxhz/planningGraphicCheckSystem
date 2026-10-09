@@ -5,18 +5,25 @@ myProject:
   tomcatProject:
     projectName: "planningGraphicCheckSystem"    # 如果使用tomcat，路由要加项目名
   tempDir: "E:/testdata/temp"               # 临时目录
+  kg_range_tableName: "BKQ_XMFW_M"             # 范围表的名称
+  kg_data_tableName: "GIS_KG_ALL_2000_20251209"             # 数据表的名称
+  kg_data_version: 999999999                              # 控规数据，VERSION 设为999999999
+  building_single_tableName: "BUILDING_SINGLE"             # 建筑数据表的名称
+  building_single_text_tableName: "BUILDING_TEXT"             # 建筑标注数据表的名称
+  redline_tableName: "gis_红线_正式红线"             # 红线数据表的名称
+  redline_similarity: 0.9                              # 红线相似度阈值
   geoTable:
     idFieldName: "OBJECTID"                 # 空间表的id字段名
     geoFieldName: "GEOM"                    # 空间表的geometry字段名
-    dmgeo: "dmgeo"                          # 用的是 dmgeo 还是 dmgeo2
+    dmgeo: "dmgeo2"                          # 用的是 dmgeo 还是 dmgeo2
     srid: 4490                              # 空间表的srid
   webSocket:
     paths: "/ws"                            # websocket路由路径
-    dataCompress: true                      # 是否启用压缩
+    dataCompress: false                      # 是否启用压缩
   dm:
     blob2binaryLenLimit: 4000               # 数据库操作，blob直接转成byte[]的长度设置. 最大 = 32767
   cache:
-    is_start_init: false                      # 是否在启动时初始化缓存
+    is_start_init: true                      # 是否在启动时初始化缓存
     strategy: "redis"                      # memory 或 redis 。  内存最快，但是每次都要从数据库加载
     superCacheThreshold: 500                # 启用超大缓存, 触发条件: blob2binaryLenLimit <= superCacheThreshold
     dataCompress: true                      # 缓存是否启用压缩

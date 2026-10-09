@@ -5,6 +5,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.hz.constant.MyConstant;
 import com.hz.utils.ConvertUtil;
 import com.hz.utils.ZLibUtil;
+import com.hz.web.mapper.GeoDataMapper;
+import com.hz.web.mapper.GisKgAll200020251209Mapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +18,31 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+/**
+ type = 0
+
+ {
+     "range_tableName_data":  [{
+         "YSDM": "B1",
+         "YSMC": "商业设施",
+         "GEOM": "POLYGON((25646.3745117188 71751.2581176758,25586.3544921875 71748.6381225586,25585.9312744141 71758.4598999023,25583.3516845703 71758.3397216797,25582.4141235352 71780.9799194336,25568.8131103516 71780.4166870117,25563.2130737305 71781.8320922852,25554.7811279297 71781.8911132812,25552.4860839844 71832.6217041016,25573.3674926758 71833.4625244141,25618.5042724609 71835.2802734375,25644.7316894531 71836.4926757812,25644.7316894531 71813.2313232422,25646.3745117188 71751.2581176758))"
+         }],
+     "data_tableName_data":[
+     {...}
+     ]
+ }
+
+
+ type = 1
+
+ {
+    "building_single_data":[{...}],
+    "building_single_text_data":[{...}]
+ }
+
+
+ */
 
 /**
  * @author saber
@@ -36,8 +63,38 @@ public class BatchInsertService {
     @Autowired
     RedisQueueService redisQueueService;
 
+    @Autowired
+    GeoDataMapper geoDataMapper;
+
+    @Autowired
+    GisKgAll200020251209Mapper gisKgAll200020251209Mapper;
+
     @Value("${myProject.webSocket.dataCompress}")
     private boolean dataCompress;
+
+    @Value("${myProject.geoTable.srid}")
+    private int srid;
+
+    @Value("${myProject.kg_range_tableName}")
+    private String kg_range_tableName;
+
+    @Value("${myProject.kg_data_tableName}")
+    private String kg_data_tableName;
+
+    @Value("${myProject.building_single_tableName}")
+    private String building_single_tableName;
+
+    @Value("${myProject.building_single_text_tableName}")
+    private String building_single_text_tableName;
+
+    @Value("${myProject.redline_tableName}")
+    private String redline_tableName;
+
+    @Value("${myProject.redline_similarity}")
+    private double redline_similarity;
+
+    @Value("${myProject.kg_data_version}")
+    private int kg_data_version;
 
 //    @Value("${myProject.ftpInfo.batchInsertErrDir}")
 //    private String batchInsertErrDir;
@@ -54,19 +111,7 @@ public class BatchInsertService {
     final int AUTO_OVER_TIME = 1000 * 60 * 5;
 
     @Async
-    public void start(String queueKey, String userName, String tableName, String wkt) {
-//        queueKey = "testkey";
-
-        // 统一控制操作时间
-        String now = LocalDateTime.now().format(formatter);
-        Map<String, Object> infoMap = new HashMap<>();
-        infoMap.put("tm", now);
-        infoMap.put("userName", userName);
-        infoMap.put("tableName", tableName);
-        // 增量还是范围更新
-        infoMap.put("hadWkt", wkt != null);
-        insertInfoMap.put(queueKey, infoMap);
-
+    public void start(String queueKey, int doType) {
         // 生成进度
         ConcurrentHashMap<String, Object> progressMap = new ConcurrentHashMap<>();
         progressMap.put("running", true);
@@ -76,22 +121,11 @@ public class BatchInsertService {
         insertProgressMap.putIfAbsent(queueKey, progressMap);
 
         try {
-            // 根据wkt更新实体状态
-            if (wkt != null) {
-                dynamicDataService.updateEntityHistory(userName, tableName, wkt, now);
-            }
-
-            log.info("{} userName: {} ,tableName: {} {}",
-                    wkt != null ? "开始范围更新！" : "开始增量入库！",
-                    userName,
-                    tableName,
-                    wkt != null ? ",wkt: " + wkt : "");
-
             // 开始
             long startTime = System.currentTimeMillis();
-
+            String now = LocalDateTime.now().format(formatter);
             // 从redis不停读取数据入库，收到 stop终止
-            loopInsertDB(queueKey, userName, tableName, startTime, now);
+            loopInsertDB(queueKey, startTime, now, doType);
 
             if (Integer.parseInt(progressMap.get("errCount").toString()) > 0) {
                 rollback(queueKey, null);
@@ -105,10 +139,11 @@ public class BatchInsertService {
             // 设置key的过期时长
             redisQueueService.expireQueue(queueKey, TIME_OUT, TimeUnit.DAYS);
             redisQueueService.expireQueue(getErrQueueKey(queueKey), TIME_OUT, TimeUnit.DAYS);
+            System.out.println(">>>>>> 入库完成");
         }
     }
 
-    private void loopInsertDB(String queueKey, String userName, String tableName, long startTime, String now) {
+    private void loopInsertDB(String queueKey, long startTime, String now, int doType) {
         while (true) {
             String msg = redisQueueService.popMessage(queueKey);
             if (msg == null) {
@@ -134,27 +169,71 @@ public class BatchInsertService {
 //                log.info("收到结束标志 stop");
                 break;
             }
+
             // 解压
             if (dataCompress) {
                 byte[] decode = Base64.getDecoder().decode(msg);
                 msg = new String(ZLibUtil.decompress(decode));
             }
 
-//            System.out.println(msg);
             JSONObject jsonObject = JSONObject.parseObject(msg);
-            JSONArray dataList = jsonObject.getJSONArray("dataList");
-//            System.out.println(tableName + " => " + dataList);
 
-            // 批量插入
-            List<Map<String, Object>> list = (List<Map<String, Object>>) (List<?>) dataList.toJavaList(Map.class);
-//            log.info("插入数据: " + list.toString());
-            batchInsert(queueKey, userName, tableName, now, list);
+            // doType   0 = 控规    1=建筑
+            if (doType == 0) {
+                // 获取范围表和数据表的表名
+                String range_tableName = kg_range_tableName;
+                String data_tableName = kg_data_tableName;
+                JSONArray range_tableName_data = jsonObject.getJSONArray("range_tableName_data");
+                JSONArray data_tableName_data = jsonObject.getJSONArray("data_tableName_data");
+
+                List<Map<String, Object>> range_tableName_data_list = (List<Map<String, Object>>) (List<?>) range_tableName_data.toJavaList(Map.class);
+                List<Map<String, Object>> data_tableName_data_list = (List<Map<String, Object>>) (List<?>) data_tableName_data.toJavaList(Map.class);
+
+                // 范围入库 和 数据更新
+                List<Long> fwIdList = new ArrayList<>();
+                for (int i = 0; i < range_tableName_data_list.size(); i++) {
+                    Map<String, Object> fwData = range_tableName_data_list.get(i);
+                    Long id = dynamicDataService.insertAndReturnId(range_tableName, fwData);
+                    fwIdList.add(id);
+                    // 更新范围数据
+                    String wkt = fwData.get(MyConstant.GEOM_FIELD_NAME).toString();
+                    gisKgAll200020251209Mapper.updateRangeData(wkt, srid, MyConstant.SPATIAL_PKG);
+                }
+
+                // 数据入库
+                batchInsert(queueKey, data_tableName, now, data_tableName_data_list, doType);
+
+            }else if (doType == 1) {
+                JSONArray building_single_data = jsonObject.getJSONArray("building_single_data");
+                JSONArray building_single_text_data = jsonObject.getJSONArray("building_single_text_data");
+
+                List<Map<String, Object>> building_single_data_list = (List<Map<String, Object>>) (List<?>) building_single_data.toJavaList(Map.class);
+                List<Map<String, Object>> building_single_text_data_list = (List<Map<String, Object>>) (List<?>) building_single_text_data.toJavaList(Map.class);
+
+                // 建筑入库
+                batchInsert(queueKey, building_single_tableName, now, building_single_data_list, doType);
+                // 建筑文本入库
+                batchInsert(queueKey, building_single_text_tableName, now, building_single_text_data_list, doType);
+                // 更新红线
+                building_single_data_list.forEach(map -> {
+                    // 找到建筑的红线
+                    String wkt = map.get(MyConstant.GEOM_FIELD_NAME).toString();
+                    Long redlineObjectId = geoDataMapper.getSimilarityRedlineObjectId(wkt, redline_tableName, redline_similarity);
+                    if (redlineObjectId != null) {
+                        System.out.println("找到红线" + redlineObjectId);
+                        // 更新建筑的红线属性
+
+                    }
+                });
+
+            }
+
         }
     }
 
 
     @Async
-    protected void batchInsert(String queueKey, String userName, String tableName, String tm, List<Map<String, Object>> dataList) {
+    protected void batchInsert(String queueKey, String tableName, String tm, List<Map<String, Object>> dataList, Integer doType) {
         ConcurrentHashMap<String, Object> progressMap = insertProgressMap.get(queueKey);
 
         // 涉及到入库时会删除OBJECTID，所以使用克隆。 因为一旦出错要能知道错误数据的OBJECTID
@@ -165,14 +244,16 @@ public class BatchInsertService {
             // map的key全部转大写
             Map<String, Object> mapNew = ConvertUtil.convertKeysToUpper(stringObjectMap);
 
+            // 控规数据，VERSION 设为999999999
+            if (doType==0) {
+                mapNew.put("VERSION", kg_data_version);
+            }
+
             objectIdList.add(mapNew.get(MyConstant.ID_FIELD_NAME).toString());
 
             HashMap<String, Object> cloneData = new HashMap<>(mapNew);
             // 去掉objectid, 这个在数据库中要自动生成
             cloneData.remove(MyConstant.ID_FIELD_NAME);
-            cloneData.put("OP_TYPE", 1);
-            cloneData.put("OP_TIME", tm);
-            cloneData.put("OP_USER", userName);
             cloneData.put(MyConstant.GEOM_LEN_FIELD_NAME, cloneData.get(MyConstant.GEOM_FIELD_NAME).toString().length());
             cloneList.add(cloneData);
         }
@@ -239,83 +320,7 @@ public class BatchInsertService {
         return redisQueueService.getMessage(queueKey, start, end);
     }
 
-//    public void exportErrorData(String queueKey) {
-//
-//        List<String> errorData = getErrorData(getErrQueueKey(queueKey), 0, -1);
-//        if (errorData.isEmpty()) {
-//            return;
-//        }
-//
-//        List<ExportBatchInsertErrData> errList = new ArrayList<>();
-//        String tableName = null;
-//        for (String msg : errorData) {
-//            JSONObject jsonObject = JSONObject.parseObject(msg);
-//            String dataId = jsonObject.getString("dataId");
-//            String errorMsg = jsonObject.getString("errorMsg");
-//            errList.add(new ExportBatchInsertErrData(dataId, errorMsg));
-//
-//            if (tableName == null) {
-//                tableName = jsonObject.getString("tableName");
-//            }
-//        }
-//
-//        // 写出 Excel
-//        String xlsxPath = localRootDir + "/" + batchInsertErrDir + "/" + queueKey + ".xlsx";
-//        EasyExcel.write(xlsxPath, ExportBatchInsertErrData.class).sheet(tableName).doWrite(errList);
-//        System.out.println("错误导出成功: " + xlsxPath);
-//
-//        // 清除错误
-//        redisQueueService.deleteQueue(getErrQueueKey(queueKey));
-//    }
-
     String getErrQueueKey(String queueKey) {
         return "err_" + queueKey;
-    }
-
-    @Async
-    public void pushTestData(String queueKey) {
-        int i = 0;
-        while (i < 100) {
-            JSONObject jsonObject = new JSONObject();
-            JSONArray dataList = new JSONArray();
-            for (int j = 0; j < 3; j++) {
-                dataList.add("test" + i + "_" + j);
-            }
-
-            jsonObject.put("tableName", "REDLINE");
-            jsonObject.put("dataList", dataList);
-            String data = jsonObject.toJSONString();
-            // 压缩
-            if (dataCompress) {
-                data = new String(ZLibUtil.compressAndBase64(data));
-            }
-            redisQueueService.pushMessage(queueKey, data);
-            i++;
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    @Async
-    public void pushTestErrorData(String queueKey) {
-        int i = 0;
-        while (i < 20) {
-            JSONObject jsonObject = new JSONObject();
-            jsonObject.put("queueKey", queueKey);
-            jsonObject.put("tableName", "testTable");
-            jsonObject.put("dataId", i);
-            jsonObject.put("errorMsg", "某种错误" + i);
-
-            redisQueueService.pushMessage(getErrQueueKey(queueKey), jsonObject.toJSONString());
-            i++;
-//            try {
-//                Thread.sleep(1000);
-//            } catch (InterruptedException e) {
-//                throw new RuntimeException(e);
-//            }
-        }
     }
 }

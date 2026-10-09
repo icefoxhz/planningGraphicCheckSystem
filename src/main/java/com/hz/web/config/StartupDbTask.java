@@ -35,17 +35,17 @@ public class StartupDbTask implements ApplicationRunner {
     @Value("${myProject.cache.is_start_init}")
     private boolean isStartInit;
 
-    public void initGDAL() {
-        ogr.RegisterAll();
-        // 为了支持中文路径，请添加下面这句代码
-        gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8","YES");
-        // 为了使属性表字段支持中文，请添加下面这句
-        gdal.SetConfigOption("SHAPE_ENCODING","CP936");
-
-        // mdb连接串
-        gdal.SetConfigOption("PGEO_DRIVER_TEMPLATE", "DRIVER=Microsoft Access Driver (*.mdb, *.accdb);DBQ=%s");
-        gdal.SetConfigOption("MDB_DRIVER_TEMPLATE", "DRIVER=Microsoft Access Driver (*.mdb, *.accdb);DBQ=%s");
-    }
+//    public void initGDAL() {
+//        ogr.RegisterAll();
+//        // 为了支持中文路径，请添加下面这句代码
+//        gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8","YES");
+//        // 为了使属性表字段支持中文，请添加下面这句
+//        gdal.SetConfigOption("SHAPE_ENCODING","CP936");
+//
+//        // mdb连接串
+//        gdal.SetConfigOption("PGEO_DRIVER_TEMPLATE", "DRIVER=Microsoft Access Driver (*.mdb, *.accdb);DBQ=%s");
+//        gdal.SetConfigOption("MDB_DRIVER_TEMPLATE", "DRIVER=Microsoft Access Driver (*.mdb, *.accdb);DBQ=%s");
+//    }
 
 //    public static void test_read_mdb(){
 //        String mdbFile = "E:\\A0205-A0208.mdb";
@@ -121,7 +121,7 @@ public class StartupDbTask implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        initGDAL();
+//        initGDAL();
 //        test_read_mdb();
 
         if ("redis".equalsIgnoreCase(strategy)) {

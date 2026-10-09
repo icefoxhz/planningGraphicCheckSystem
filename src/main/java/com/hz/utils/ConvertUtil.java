@@ -1,5 +1,6 @@
 package com.hz.utils;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hz.constant.MyConstant;
 import com.hz.web.service.AbsCacheService;
@@ -8,6 +9,7 @@ import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Blob;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -121,6 +123,13 @@ public class ConvertUtil {
 
     public static Map objectToMap(Object obj) {
         return objectMapper.convertValue(obj, Map.class);
+    }
+
+    public static List<Map<String, Object>> objectToList(Object obj) {
+        if (obj == null) {
+            return Collections.emptyList();
+        }
+        return objectMapper.convertValue(obj, new TypeReference<List<Map<String, Object>>>() {});
     }
 
     public static Map<String, Object> convertKeysToUpper(Map<String, Object> map) {

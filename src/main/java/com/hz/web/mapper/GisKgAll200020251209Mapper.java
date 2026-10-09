@@ -4,11 +4,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.hz.web.entity.GisKgAll200020251209Entity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.springframework.stereotype.Repository;
-
-import java.util.List;
 
 /**
  * 控规全要素 GIS_KG_ALL_2000_20251209
@@ -26,4 +23,12 @@ import java.util.List;
 @Mapper
 @Repository
 public interface GisKgAll200020251209Mapper extends BaseMapper<GisKgAll200020251209Entity> {
+    // 更新范围的值推为历史
+    @Update("UPDATE GIS_KG_ALL_2000_20251209 " +
+            "SET VERSION = DATEDIFF(SECOND, " +
+            "    TO_DATE('1970-01-01 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), " +
+            "    SYSDATE) " +
+            "WHERE ${pkg}.ST_Contains(" +
+            "    ${pkg}.ST_GeomFromText(#{wkt}, #{srid}), geom) = 1")
+    void updateRangeData(@Param("wkt") String wkt, @Param("srid") int srid, @Param("pkg") String pkg);
 }

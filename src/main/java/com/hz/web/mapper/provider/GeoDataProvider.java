@@ -10,6 +10,17 @@ import java.util.List;
  */
 public class GeoDataProvider {
     public String list(@Param("tableName") String tableName, @Param("fields") List<String> fields, @Param("wkt") String wkt, @Param("sqlCondition") String sqlCondition, boolean geomAsBinary) {
+        // 如果tableName是小写，就加""
+//        if (!tableName.equals(tableName.toUpperCase())){
+//            tableName = "\"" + tableName + "\"";
+//        }
+        fields.forEach(field -> {
+            if (!field.equals(field.toUpperCase())){
+                field = "\"" + field + "\"";
+                fields.set(fields.indexOf(field), field);
+            }
+        });
+
         String fieldsStr = String.join(",", fields);
         String sql = geomAsBinary
                 ?
@@ -51,6 +62,10 @@ public class GeoDataProvider {
     }
 
     public String listGeom(@Param("tableName") String tableName) {
+        // 如果tableName是小写，就加""
+//        if (!tableName.equals(tableName.toUpperCase())){
+//            tableName = "\"" + tableName + "\"";
+//        }
         return String.format("select %s,%s from %s where %s",
                 MyConstant.ID_FIELD_NAME,
                 MyConstant.SPATIAL_PKG + ".ST_AsBinary(" + MyConstant.GEOM_FIELD_NAME + ") as " + MyConstant.WKB_FIELD_NAME,

@@ -2,6 +2,7 @@ package com.hz.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.hz.web.entity.GisKgAll200020251209Entity;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 

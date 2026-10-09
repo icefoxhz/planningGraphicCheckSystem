@@ -1,13 +1,7 @@
 package com.hz.web.controller;
 
-
-//import com.hz.web.service.RedisQueueService;
-
-import com.hz.constant.MyConstant;
-import com.hz.utils.ConvertUtil;
+import com.hz.web.config.DynamicTableConfig;
 import com.hz.web.service.BatchInsertService;
-import com.hz.web.service.DynamicDataService;
-import com.hz.web.service.impl.GeoDataServiceImpl;
 import com.swsk.lib.base.entity.ResponseEntity;
 import com.swsk.lib.base.utils.ResultUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,44 +29,21 @@ public class GeoDataController {
     @Value("${spring.redis.password}")
     private String password;
 
-    //    @Autowired
-//    GeoDataServiceImpl geoDataService;
-    @Autowired
-    DynamicDataService dynamicDataService;
-
     @Autowired
     BatchInsertService batchInsertService;
 
+    @Autowired
+    DynamicTableConfig dynamicTableConfig;
 
-    @PostMapping(value = "data/geo/insert")
+
+    @PostMapping(value = "data/geo/jzKgBatchInsert")
     @ResponseBody
-    public ResponseEntity insert(@RequestBody Map<String, Object> dataMap) {
+    public ResponseEntity jzKgBatchInsert(@RequestBody Map<String, String> dataMap) {
         try {
-            String tableName = dataMap.get("tableName").toString();
-            Object data = dataMap.get("data");
-
-            Long id = dynamicDataService.insertAndReturnId(tableName, ConvertUtil.objectToMap(data));
-
-            return ResultUtil.success(id, "success");
-        } catch (Exception ex) {
-//            System.out.println(ex.toString());
-            return ResultUtil.error(null, ex.toString());
-        }
-    }
-
-    @PostMapping(value = "data/geo/batchInsert")
-    @ResponseBody
-    public ResponseEntity batchInsert(@RequestBody Map<String, Object> dataMap) {
-        try {
-            String userName = dataMap.get("userName").toString();
-            String tableName = dataMap.get("tableName").toString().toUpperCase();
-            String wkt = dataMap.containsKey("wkt") ? dataMap.get("wkt").toString() : null;
-
-            // 获取时间戳
-            String redisKey = String.valueOf(System.currentTimeMillis());
-            batchInsertService.start(redisKey, userName, tableName, wkt);
-//            batchInsertService.pushTestData(redisKey);
-//            batchInsertService.pushTestErrorData(redisKey);
+            // 0 = 控规    1=建筑
+            int doType = dataMap.containsKey("type") ? Integer.parseInt(dataMap.get("type")) : 0;
+            String redisKey = dataMap.get("redisKey");
+            batchInsertService.start(redisKey, doType);
 
             Map<String, Object> result = new HashMap<>();
             result.put("queueKey", redisKey);
@@ -82,30 +53,30 @@ public class GeoDataController {
             result.put("password", Base64.getEncoder().encodeToString(password.getBytes()));
 
             return ResultUtil.success(result, "success");
+
         } catch (Exception ex) {
 //            System.out.println(ex.toString());
             return ResultUtil.error(null, ex.toString());
         }
     }
 
-    @PostMapping(value = "data/geo/batchInsertRollback")
+    @PostMapping(value = "data/geo/jzKgBatchInsertProgress")
     @ResponseBody
-    public ResponseEntity batchInsertRollback(@RequestBody Map<String, Object> dataMap) {
+    public ResponseEntity jzKgBatchInsertProgress(@RequestBody Map<String, Object> dataMap) {
         try {
             String queueKey = dataMap.get("queueKey").toString();
-
-            batchInsertService.rollback(queueKey, null);
-
-            return ResultUtil.success(null, "success");
+//            System.out.println("queueKey = " + queueKey);
+            ConcurrentHashMap<String, Object> progress = batchInsertService.getProgress(queueKey);
+            return ResultUtil.success(progress, "success");
         } catch (Exception ex) {
 //            System.out.println(ex.toString());
             return ResultUtil.error(null, ex.toString());
         }
     }
 
-    @PostMapping(value = "data/geo/batchInsertError")
+    @PostMapping(value = "data/geo/jzKgBatchInsertError")
     @ResponseBody
-    public ResponseEntity batchInsertError(@RequestBody Map<String, Object> dataMap) {
+    public ResponseEntity jzKgBatchInsertError(@RequestBody Map<String, Object> dataMap) {
         try {
             Integer start = Integer.parseInt(dataMap.get("start").toString());
             Integer end = Integer.parseInt(dataMap.get("end").toString());
@@ -118,80 +89,35 @@ public class GeoDataController {
         }
     }
 
-    @PostMapping(value = "data/geo/batchInsertProgress")
+    /**
+     * 获取 application-dynamic.yml 里配置的表清单，结构跟 yml 保持一致。
+     * <p>kg 是「年份 -> {table, ftpDir}」，dxt 是「年份 -> 比例尺 -> ftp 文件路径」；dxt 的比例尺 key
+     * 已经由 {@code DynamicTableConfig.scaleLabel()} 补成 {@code "1:500"} 的展示形式
+     * （yml 里为了能被正常绑定只能写纯数字，写 {@code "1:500"} 会被 Spring Boot 静默抹掉冒号）。</p>
+     * <p>返回示例：</p>
+     * <pre>
+     * {
+     *   "code": 200,
+     *   "data": {
+     *     "kg": {
+     *       "2024": {"table": "kg2024", "ftpDir": "kg/2024"},
+     *       "2025": {"table": "kg2025", "ftpDir": "kg/2025"}
+     *     },
+     *     "dxt": {
+     *       "2024": {"1:500": "dxt/2024/500", "1:1000": "dxt/2024/1000"},
+     *       "2025": {"1:500": "dxt/2025/500", "1:1000": "dxt/2025/1000"}
+     *     }
+     *   },
+     *   "msg": "success"
+     * }
+     * </pre>
+     */
+    @PostMapping(value = "config/dynamicTables")
     @ResponseBody
-    public ResponseEntity batchInsertProgress(@RequestBody Map<String, Object> dataMap) {
+    public ResponseEntity dynamicTables() {
         try {
-            String queueKey = dataMap.get("queueKey").toString();
-//            System.out.println("queueKey = " + queueKey);
-            ConcurrentHashMap<String, Object> progress = batchInsertService.getProgress(queueKey);
-            return ResultUtil.success(progress, "success");
+            return ResultUtil.success(dynamicTableConfig.toViewMap(), "success");
         } catch (Exception ex) {
-//            System.out.println(ex.toString());
-            return ResultUtil.error(null, ex.toString());
-        }
-    }
-
-//    @PostMapping(value = "data/geo/batchInsertErrorExport")
-//    @ResponseBody
-//    public ResponseEntity batchInsertErrorExport(@RequestBody Map<String, Object> dataMap) {
-//        try {
-//            String queueKey = dataMap.get("queueKey").toString();
-//            batchInsertService.exportErrorData(queueKey);
-//            return ResultUtil.success(null, "success");
-//        } catch (Exception ex) {
-////            System.out.println(ex.toString());
-//            return ResultUtil.error(null, ex.toString());
-//        }
-//    }
-
-    @PostMapping(value = "data/geo/remove")
-    @ResponseBody
-    public ResponseEntity remove(@RequestBody Map<String, Object> dataMap) {
-        try {
-            String objectId = dataMap.get("objectId").toString();
-            String userName = dataMap.get("userName").toString();
-            String tableName = dataMap.get("tableName").toString();
-            String reason = dataMap.get("reason").toString();
-            Integer op = Integer.parseInt(dataMap.get("op").toString());
-
-            dynamicDataService.delete(userName, tableName, reason, op, objectId);
-
-            return ResultUtil.success(null, "success");
-        } catch (Exception ex) {
-//            System.out.println(ex.toString());
-            return ResultUtil.error(null, ex.toString());
-        }
-    }
-
-    @PostMapping(value = "data/geo/isOverlap")
-    @ResponseBody
-    public ResponseEntity isOverlap(@RequestBody Map<String, Object> dataMap) {
-        try {
-            String tableName = dataMap.get("tableName").toString();
-            String wkt = dataMap.get("wkt").toString();
-
-            boolean ret = dynamicDataService.isOverlap(wkt, tableName);
-
-            return ResultUtil.success(ret, "success");
-        } catch (Exception ex) {
-//            System.out.println(ex.toString());
-            return ResultUtil.error(null, ex.toString());
-        }
-    }
-
-    @PostMapping(value = "data/geo/isOverlapEx")
-    @ResponseBody
-    public ResponseEntity isOverlapEx(@RequestBody Map<String, Object> dataMap) {
-        try {
-            String tableName = dataMap.get("tableName").toString();
-            Map<String, String> wktDict = (Map<String, String>)dataMap.get("wkt");
-
-            ArrayList<String> ret = dynamicDataService.isOverlapEx(wktDict, tableName);
-
-            return ResultUtil.success(ret, "success");
-        } catch (Exception ex) {
-//            System.out.println(ex.toString());
             return ResultUtil.error(null, ex.toString());
         }
     }

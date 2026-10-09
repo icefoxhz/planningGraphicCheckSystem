@@ -161,7 +161,7 @@ public class GisKgAll200020251209Entity implements Serializable {
      * 数据版本
      */
     @TableField("VERSION")
-    private Integer version;
+    private Integer version=999999999;
 
     /**
      * 几何字节长度，本系统维护，用于大几何的缓存分流

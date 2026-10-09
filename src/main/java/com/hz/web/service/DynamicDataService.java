@@ -5,6 +5,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.hz.constant.MyConstant;
 import com.hz.utils.ConvertUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,11 +45,7 @@ public class DynamicDataService {
     @Value("${myProject.geoTable.srid}")
     private int srid;
 
-    // 更新后，原数据的类型
-    final int AFTER_UPDATE_OP_TYPE = 0;
-
-    // 新增
-    final int NEW_ADD_OP_TYPE = 1;
+    // 业务约定：op_type 0 = 更新后原数据，1 = 新增
 
 
 //    ConcurrentHashMap<String, ConcurrentLinkedQueue<List<Map<String, Object>>>> tableDataQueue = new ConcurrentHashMap<>();
@@ -132,30 +130,50 @@ public class DynamicDataService {
         // 获取自增主键（OBJECTID）
         Number key = keyHolder.getKey();
 
-        String updateSql = String.format("update %s set %s=%d, op_type=%d where %s=%d",
-                tableName.toUpperCase(), MyConstant.GEOM_LEN_FIELD_NAME, data.get(MyConstant.GEOM_FIELD_NAME).toString().length(), NEW_ADD_OP_TYPE, MyConstant.ID_FIELD_NAME, key);
+        String updateSql = String.format("update %s set %s=%d where %s=%d",
+                tableName.toUpperCase(), MyConstant.GEOM_LEN_FIELD_NAME, data.get(MyConstant.GEOM_FIELD_NAME).toString().length(), MyConstant.ID_FIELD_NAME, key);
         jdbcTemplate.update(updateSql);
 
         return key != null ? key.longValue() : null;
     }
 
-    public void delete(String userName, String tableName, String reason, Integer op, String objectId) {
-        // 拼接 SQL 中只能拼接表名、列名，不能拼接值
-        String now = LocalDateTime.now().format(formatter);
+    /**
+     * 物理删除指定表的一条记录。
+     * <p>表名只能拼字符串（占位符不能用于表名），而它的来源是 HTTP 入参，所以这里必须先做白名单校验。</p>
+     *
+     * @param tableName 表名，只允许字母、数字、下划线
+     * @param objectId  主键值（OBJECTID）；纯数字按数值绑定，其余原样按字符串比对
+     * @return 实际删除的行数，0 表示没有匹配到记录
+     */
+    public int delete(String tableName, String objectId) {
+        checkTableName(tableName);
+        if (objectId == null || objectId.trim().isEmpty()) {
+            throw new IllegalArgumentException("objectId 不能为空");
+        }
+
         String sql = String.format(
-                "UPDATE %s SET OP_TYPE = ?, OP_TIME = ?, OP_USER = ?, OP_REASON = ? WHERE %s = ?", tableName.toUpperCase(), MyConstant.ID_FIELD_NAME);
+                "delete from %s where %s = ?", tableName.toUpperCase(), MyConstant.ID_FIELD_NAME);
 
-        jdbcTemplate.update(sql, op, now, userName, reason, objectId);
+        String id = objectId.trim();
+        // OBJECTID 在空间表里是 INT，按数值绑定，避免达梦对字符参数做隐式转换
+        Object idParam = id.matches("\\d+") ? Long.valueOf(id) : id;
+
+        return jdbcTemplate.update(sql, idParam);
     }
 
-    public void updateEntityHistory(String userName, String tableName, String wkt, String tm) {
-        String sql = String.format("update %s set op_type = ?, op_time = ?, op_reason='范围更新', OP_USER=? where %s.ST_contains(%s, %s.ST_GeomFromText(?))", tableName.toUpperCase(), MyConstant.SPATIAL_PKG, MyConstant.GEOM_FIELD_NAME, MyConstant.SPATIAL_PKG);
-        jdbcTemplate.update(sql, AFTER_UPDATE_OP_TYPE, tm, userName, wkt);
+    /**
+     * 表名白名单校验：表名会被直接拼进 SQL，不能信任调用方传入的值。
+     */
+    private void checkTableName(String tableName) {
+        if (tableName == null || !tableName.matches("^[a-zA-Z0-9_]+$")) {
+            throw new IllegalArgumentException("非法表名：" + tableName);
+        }
     }
+
 
     public boolean isOverlap(String wkt, String tableName) {
-        // 只和现状的比
-        String sql = String.format("select count(1) from %s where op_type = %d and %s.ST_Intersects(%s, %s.ST_GeomFromText('%s'))", tableName.toUpperCase(), NEW_ADD_OP_TYPE, MyConstant.SPATIAL_PKG, MyConstant.GEOM_FIELD_NAME, MyConstant.SPATIAL_PKG, wkt);
+        // 只和现状的比，op_type = 1 即本次新增
+        String sql = String.format("select count(1) from %s where op_type = %d and %s.ST_Intersects(%s, %s.ST_GeomFromText('%s'))", tableName.toUpperCase(), 1, MyConstant.SPATIAL_PKG, MyConstant.GEOM_FIELD_NAME, MyConstant.SPATIAL_PKG, wkt);
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class);
         return count > 0;
     }
@@ -211,80 +229,6 @@ public class DynamicDataService {
     }
 
     public void rollback(String userName, String tableName, String insertTime, boolean hadWkt) {
-        // 增量和范围入库都要做的回滚操作
-        String sql = String.format("delete from %s where op_type=? and op_user=? and op_time=?", tableName.toUpperCase());
-        jdbcTemplate.update(sql, NEW_ADD_OP_TYPE, userName, insertTime);
-
-        if (hadWkt) {
-            // 范围更新回滚，额外操作
-            String updateSql = String.format("update %s set op_type=?, op_reason='范围更新回滚' where op_type=? and op_user=? and op_time=?", tableName.toUpperCase());
-            jdbcTemplate.update(updateSql, NEW_ADD_OP_TYPE, AFTER_UPDATE_OP_TYPE, userName, insertTime);
-        }
-
     }
-
-//    private void checkTableAndColumns(String tableName, List<String> columns) {
-//        if (!tableName.matches("^[a-zA-Z0-9_]+$")) {
-//            throw new IllegalArgumentException("非法表名：" + tableName);
-//        }
-//        for (String col : columns) {
-//            if (!col.matches("^[a-zA-Z0-9_]+$")) {
-//                throw new IllegalArgumentException("非法字段名：" + col);
-//            }
-//        }
-//    }
-//
-//    public void putDataToQueue(String tableName, List<Map<String, Object>> dataList) {
-//        tableDataQueue.computeIfAbsent(tableName, k -> new ConcurrentLinkedQueue<>()).add(dataList);
-//    }
-//
-//    @Async
-//    public void insertDataFromQueue(String tableName, int totalCount) {
-//        ConcurrentHashMap<String, Object> infoMap;
-//        try {
-//            if (!tableInsertDataInfoMap.containsKey(tableName)) {
-//                infoMap = new ConcurrentHashMap<>();
-//                tableInsertDataInfoMap.put(tableName, infoMap);
-//            } else {
-//                infoMap = tableInsertDataInfoMap.get(tableName);
-//            }
-//            infoMap.put("count", 0);
-//            infoMap.put("error", "");
-//
-//
-//            ConcurrentLinkedQueue<List<Map<String, Object>>> q = tableDataQueue.computeIfAbsent(tableName, k -> new ConcurrentLinkedQueue<>());
-//            while (true) {
-//                List<Map<String, Object>> dataList = q.poll();
-//                if (dataList == null) {
-//                    Thread.sleep(200);
-//                    continue;
-//                }
-//
-//                batchInsert(tableName, dataList);
-//
-//                int prevCount = Integer.parseInt(infoMap.get("count").toString());
-//                int currentCount = dataList.size() + prevCount;
-//                infoMap.put("count", currentCount);
-//
-//                if (currentCount >= totalCount) {
-//                    log.info("本次入库完成, 总数: {}", currentCount);
-//                    break;
-//                }
-//            }
-//
-//            // 更新 geom_len
-//            tableMetadataService.initTable(tableName);
-//        } catch (Exception e) {
-//            log.error(e.toString());
-//            tableInsertDataInfoMap.get(tableName).put("error", e.toString());
-//        }
-//    }
-//
-//    public Map<String, Object> getInsertInfo(String tableName) {
-//        if (tableInsertDataInfoMap.containsKey(tableName)) {
-//            return tableInsertDataInfoMap.get(tableName);
-//        }
-//        return null;
-//    }
 
 }

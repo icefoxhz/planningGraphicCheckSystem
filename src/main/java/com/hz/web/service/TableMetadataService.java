@@ -64,6 +64,8 @@ public class TableMetadataService {
     public void createGeomLenFieldAndIdx(){
         List<String> tables = tableMapper.getTables(username.toUpperCase());
         for (String table : tables) {
+            if (!table.equals(table.toLowerCase()))
+                continue;
             List<JdbcFieldTypeEntity> tableFieldsInfo = getTableFieldsInfo(table);
             for (JdbcFieldTypeEntity jdbcFieldTypeEntity : tableFieldsInfo) {
                 if (jdbcFieldTypeEntity.getFieldName().equalsIgnoreCase(GEOM_FIELD_NAME)){
