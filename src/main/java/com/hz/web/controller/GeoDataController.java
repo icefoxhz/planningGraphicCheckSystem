@@ -90,7 +90,7 @@ public class GeoDataController {
     }
 
     /**
-     * 获取 application-dynamic.yml 里配置的表清单，结构跟 yml 保持一致。
+     * 获取 application-kgDxt.yml 里配置的表清单，结构跟 yml 保持一致。
      * <p>kg 是「年份 -> {table, ftpDir}」，dxt 是「年份 -> 比例尺 -> ftp 文件路径」；dxt 的比例尺 key
      * 已经由 {@code DynamicTableConfig.scaleLabel()} 补成 {@code "1:500"} 的展示形式
      * （yml 里为了能被正常绑定只能写纯数字，写 {@code "1:500"} 会被 Spring Boot 静默抹掉冒号）。</p>

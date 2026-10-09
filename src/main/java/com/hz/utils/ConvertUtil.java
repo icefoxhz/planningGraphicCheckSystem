@@ -2,13 +2,10 @@ package com.hz.utils;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hz.constant.MyConstant;
-import com.hz.web.service.AbsCacheService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.Blob;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,91 +31,6 @@ public class ConvertUtil {
             log.error("MD5加密失败", e);
         }
         return md5;
-    }
-
-    public static void getBytesFromCache(String tableName, List<Map<String, Object>> data, AbsCacheService service) {
-        data.parallelStream().forEach(stringObjectMap -> {
-            try {
-                doGetBytesFromCache(tableName, stringObjectMap, service);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-
-    }
-
-    private static void doGetBytesFromCache(String tableName, Map<String, Object> stringObjectMap, AbsCacheService service) throws Exception {
-        int id = (int) stringObjectMap.get(MyConstant.ID_FIELD_NAME);
-        Object blobValue = service.getGeomBlobFromCache(tableName, id);
-        if (blobValue == null) {
-            log.error("缓存不存在！table: {}, id: {}", tableName, id);
-        }
-        stringObjectMap.put(MyConstant.WKB_FIELD_NAME, blobValue);
-    }
-
-
-    public static void convertBlobToBytes(String tableName, List<Map<String, Object>> data, AbsCacheService service) {
-        data.parallelStream().forEach(stringObjectMap -> {
-            doConvertBlobToBytes(tableName, stringObjectMap, service);
-        });
-
-    }
-
-    private static void doConvertBlobToBytes(String tableName, Map<String, Object> stringObjectMap, AbsCacheService service) {
-        if (!stringObjectMap.containsKey(MyConstant.WKB_FIELD_NAME)) {
-            return;
-        }
-
-        int id = (int) stringObjectMap.get(MyConstant.ID_FIELD_NAME);
-        Object value = stringObjectMap.get(MyConstant.WKB_FIELD_NAME);
-        if (value instanceof Blob) {
-            try {
-                Object blobValue = null;
-
-                if (service != null) {
-                    blobValue = service.getGeomBlobFromCache(tableName, id);
-                }
-
-                if (blobValue == null) {
-                    Blob blob = (Blob) (value);
-                    blobValue = blob.getBytes(1, (int) blob.length());
-                    if (service != null) {
-                        service.setGeomBlobToCache(tableName, id, blobValue);
-                    }
-                }
-                stringObjectMap.put(MyConstant.WKB_FIELD_NAME, blobValue);
-            } catch (Exception e) {
-                log.error(e.toString());
-            }
-        }
-
-//        int id = (int) stringObjectMap.get(MyConstant.ID_FIELD_NAME);
-//        for (Map.Entry<String, Object> entry : stringObjectMap.entrySet()) {
-//            String key = entry.getKey().toUpperCase();
-//            if (key.equals(MyConstant.WKB_FIELD_NAME.toUpperCase())) {
-//                Object value = entry.getValue();
-//                if (value instanceof Blob) {
-//                    try {
-//                        Object blobValue = null;
-//
-//                        if (service != null) {
-//                            blobValue = service.getGeomBlobFromCache(tableName, id);
-//                        }
-//
-//                        if (blobValue == null) {
-//                            Blob blob = (Blob) (value);
-//                            blobValue = blob.getBytes(1, (int) blob.length());
-//                            if (service != null) {
-//                                service.setGeomBlobToCache(tableName, id, blobValue);
-//                            }
-//                        }
-//                        entry.setValue(blobValue);
-//                    } catch (Exception e) {
-//                        log.error(e.toString());
-//                    }
-//                }
-//            }
-//        }
     }
 
     public static Map objectToMap(Object obj) {

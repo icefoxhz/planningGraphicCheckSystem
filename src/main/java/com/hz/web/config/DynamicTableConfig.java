@@ -11,7 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * application-dynamic.yml 的读取类。
+ * application-kgDxt.yml 的读取类。
  *
  * <p>yml 顶层的 {@code tables} 节点下面按分类挂配置，两类都是「年份 -&gt; 明细」的结构，
  * 所以用 {@code @ConfigurationProperties(prefix = "tables")} + 两个字段来接：</p>
@@ -144,7 +144,7 @@ public class DynamicTableConfig {
     @PostConstruct
     public void logConfig() {
         if (kg.isEmpty() && dxt.isEmpty()) {
-            log.warn("application-dynamic.yml 的 tables 节点没有绑定到任何配置，请检查配置文件路径与 spring.profiles.include");
+            log.warn("application-kgDxt.yml 的 tables 节点没有绑定到任何配置，请检查配置文件路径与 spring.profiles.include");
             return;
         }
         log.info("dynamic tables [kg] 共 {} 年: {}", kg.size(), kg);
