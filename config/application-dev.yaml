@@ -3,7 +3,7 @@ myProject:
   server:
     requestTimeOut: 60000                   # 超时，单位毫秒
   tomcatProject:
-    projectName: "planningGraphicCheckSystem"    # 如果使用tomcat，路由要加项目名
+    projectName: "planningGraphicManagementSystem"    # 如果使用tomcat，路由要加项目名
   tempDir: "E:/testdata/temp"               # 临时目录
   kg_range_tableName: "BKQ_XMFW_M"             # 范围表的名称
   kg_data_tableName: "GIS_KG_ALL_2000_20251209"             # 数据表的名称
@@ -16,21 +16,36 @@ myProject:
     idFieldName: "OBJECTID"                 # 空间表的id字段名
     geoFieldName: "GEOM"                    # 空间表的geometry字段名
     dmgeo: "dmgeo2"                          # 用的是 dmgeo 还是 dmgeo2
-    srid: 4490                              # 空间表的srid
+    srid: 0                                 # 空间表的srid（>0 才在 ST_GeomFromText 里带 srid）
+  download:
+    rootDir: "E:/ftp/cache/mapTilePictures"     # 下载arcgis服务图片的缓存目录
+  ftpInfo:
+    ip: 47.110.86.241
+    port: 8018
+    username: "test"
+    password: "test"
+    localRootDir: "E:/ftp"                  # 本地ftp根目录
+    attachment:
+      dir: "attachment"                     # 附件上传目录
+    batchInsertErrDir: "batchInsertErr"     # 批量插入错误导出目录
+    projectUpdateDir: "update"              # 软件更新包存放根目录
+  symbol: # cad符号相关的目录
+    pipe: "E:/ftp/symbol/管点编号对应块名.xlsx"       # 管线
+    planning: "E:/ftp/symbol/城市规划制图图例.xlsx"   # 规划
+  pipeCollisionStandard:  # 管线碰撞比对标准
+    horizontal: "E:/ftp/pipeCollisionStandard/水平净距标准new.xlsx"
+    vertical: "E:/ftp/pipeCollisionStandard/垂直净距标准new.xlsx"
+    type: "E:/ftp/pipeCollisionStandard/管线大小类.xlsx"
   webSocket:
     paths: "/ws"                            # websocket路由路径
-    dataCompress: false                      # 是否启用压缩
+    dataCompress: true                      # 是否启用压缩
   dm:
-    blob2binaryLenLimit: 4000               # 数据库操作，blob直接转成byte[]的长度设置. 最大 = 32767
+    blob2binaryLenLimit: 400               # 数据库操作，blob直接转成byte[]的长度设置. 最大 = 32767
   cache:
-    is_start_init: true                      # 是否在启动时初始化缓存
+    is_start_init: false
     strategy: "redis"                      # memory 或 redis 。  内存最快，但是每次都要从数据库加载
     superCacheThreshold: 500                # 启用超大缓存, 触发条件: blob2binaryLenLimit <= superCacheThreshold
-    dataCompress: true                      # 缓存是否启用压缩
-  upload:
-    rootDir: "D:\\test\\"                   # 文件存放的目录位置
-  download:
-    fileDir: "D:\\test\\"                   # 文件存放的目录位置
+    dataCompress: false                      # 缓存是否启用压缩
 
 # =============================
 
